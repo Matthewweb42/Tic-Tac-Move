@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Move</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Tic-Tac-Move</h1>
+        <div class="game-info">
+            <p id="status">Player X's Turn</p>
+            <p id="mode-status">Mode: Place Piece</p>
+        </div>
+        <div class="board" id="board">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+        <div class="controls">
+            <button id="reset-btn">Reset Game</button>
+            <button id="toggle-mode-btn" disabled>Switch to Move Mode</button>
+        </div>
+        <div class="rules">
+            <h2>How to Play</h2>
+            <ul>
+                <li>Players take turns placing their pieces (X or O) on the board</li>
+                <li>Each player places 3 pieces on the board</li>
+                <li>After all pieces are placed, players can move their pieces to adjacent empty cells</li>
+                <li>Get three in a row (horizontal, vertical, or diagonal) to win!</li>
+            </ul>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
