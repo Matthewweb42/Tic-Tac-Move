@@ -24,7 +24,6 @@ const cells = document.querySelectorAll('.cell');
 const statusDisplay = document.getElementById('status');
 const modeStatusDisplay = document.getElementById('mode-status');
 const resetBtn = document.getElementById('reset-btn');
-const toggleModeBtn = document.getElementById('toggle-mode-btn');
 
 // Initialize game
 function init() {
@@ -32,7 +31,6 @@ function init() {
         cell.addEventListener('click', () => handleCellClick(index));
     });
     resetBtn.addEventListener('click', resetGame);
-    toggleModeBtn.addEventListener('click', toggleMode);
     updateDisplay();
 }
 
@@ -70,7 +68,6 @@ function handlePlaceMode(index) {
     // Check if all pieces are placed
     if (piecesPlaced.X === maxPieces && piecesPlaced.O === maxPieces) {
         gameMode = 'move';
-        toggleModeBtn.disabled = false;
         modeStatusDisplay.textContent = 'Mode: Move Pieces';
     }
 
@@ -95,39 +92,37 @@ function handleMoveMode(index) {
     }
 
     // If a piece is already selected
-    if (selectedPiece !== null) {
-        // If clicking the same piece, deselect it
-        if (selectedPiece === index) {
-            deselectPiece();
+    // If clicking the same piece, deselect it
+    if (selectedPiece === index) {
+        deselectPiece();
+        return;
+    }
+
+    // Check if the target cell is empty and adjacent
+    if (board[index] === '' && isAdjacent(selectedPiece, index)) {
+        // Move the piece
+        board[index] = board[selectedPiece];
+        board[selectedPiece] = '';
+        deselectPiece();
+        updateBoard();
+
+        // Check for winner
+        if (checkWinner()) {
+            gameActive = false;
+            statusDisplay.textContent = `Player ${currentPlayer} Wins!`;
             return;
         }
 
-        // Check if the target cell is empty and adjacent
-        if (board[index] === '' && isAdjacent(selectedPiece, index)) {
-            // Move the piece
-            board[index] = board[selectedPiece];
-            board[selectedPiece] = '';
-            deselectPiece();
-            updateBoard();
-
-            // Check for winner
-            if (checkWinner()) {
-                gameActive = false;
-                statusDisplay.textContent = `Player ${currentPlayer} Wins!`;
-                return;
-            }
-
-            // Switch player
-            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-            updateDisplay();
-        } else {
-            // Invalid move, deselect and potentially select new piece
-            deselectPiece();
-            if (board[index] === currentPlayer) {
-                selectedPiece = index;
-                cells[index].classList.add('selected');
-                highlightAdjacentCells(index);
-            }
+        // Switch player
+        currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+        updateDisplay();
+    } else {
+        // Invalid move, deselect and potentially select new piece
+        deselectPiece();
+        if (board[index] === currentPlayer) {
+            selectedPiece = index;
+            cells[index].classList.add('selected');
+            highlightAdjacentCells(index);
         }
     }
 }
@@ -163,17 +158,6 @@ function deselectPiece() {
     }
     // Remove all highlights
     cells.forEach(cell => cell.classList.remove('highlight'));
-}
-
-// Toggle between place and move mode (manual override)
-function toggleMode() {
-    if (piecesPlaced.X < maxPieces || piecesPlaced.O < maxPieces) {
-        return; // Can't switch if not all pieces are placed
-    }
-
-    gameMode = gameMode === 'place' ? 'move' : 'place';
-    deselectPiece();
-    updateDisplay();
 }
 
 // Check for winner
@@ -221,7 +205,6 @@ function resetGame() {
     gameMode = 'place';
     selectedPiece = null;
     piecesPlaced = { X: 0, O: 0 };
-    toggleModeBtn.disabled = true;
     deselectPiece();
     updateBoard();
     updateDisplay();
