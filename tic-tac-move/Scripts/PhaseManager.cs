@@ -69,8 +69,8 @@ public partial class PhaseManager : Node
 
         CurrentPhase = CurrentPhase switch
         {
-            GamePhase.BluePremove => GamePhase.RedPlacement,
-            GamePhase.RedPremove => GamePhase.Resolution,
+            GamePhase.BluePremove => GamePhase.RedResolution,  // After blue premove, resolve red's moves from last turn
+            GamePhase.RedPremove => GamePhase.BlueResolution,  // After red premove, resolve blue's moves from last turn
             _ => CurrentPhase
         };
 
@@ -79,14 +79,22 @@ public partial class PhaseManager : Node
 
     /// <summary>
     /// Called when resolution phase animations are complete.
-    /// Advances to the next turn.
+    /// Advances to the next team's placement phase.
     /// </summary>
     public void OnResolutionComplete()
     {
-        TurnNumber++;
-        CurrentPhase = GamePhase.BluePlacement;
+        if (CurrentPhase == GamePhase.BlueResolution)
+        {
+            // Complete cycle, increment turn
+            TurnNumber++;
+            EmitSignal(SignalName.TurnNumberChanged, TurnNumber);
+            CurrentPhase = GamePhase.BluePlacement;
+        }
+        else if (CurrentPhase == GamePhase.RedResolution)
+        {
+            CurrentPhase = GamePhase.RedPlacement;
+        }
 
-        EmitSignal(SignalName.TurnNumberChanged, TurnNumber);
         EmitSignal(SignalName.PhaseChanged, (int)CurrentPhase);
     }
 
@@ -127,9 +135,24 @@ public partial class PhaseManager : Node
         CurrentPhase == GamePhase.RedPremove;
 
     /// <summary>
-    /// Returns true if currently in the resolution phase.
+    /// Returns true if currently in any resolution phase.
     /// </summary>
-    public bool IsResolutionPhase() => CurrentPhase == GamePhase.Resolution;
+    public bool IsResolutionPhase() => 
+        CurrentPhase == GamePhase.RedResolution ||
+        CurrentPhase == GamePhase.BlueResolution;
+
+    /// <summary>
+    /// Returns the team whose moves are being resolved.
+    /// </summary>
+    public Team GetResolvingTeam()
+    {
+        return CurrentPhase switch
+        {
+            GamePhase.RedResolution => Team.Red,
+            GamePhase.BlueResolution => Team.Blue,
+            _ => Team.None
+        };
+    }
 
     /// <summary>
     /// Returns true if the game is over.

@@ -205,6 +205,12 @@ public partial class UIManager : Control
                 _phaseLabel.Text = "Set move direction (or stay)";
                 break;
 
+            case GamePhase.RedResolution:
+                _turnLabel.Text = "Resolving...";
+                _turnLabel.AddThemeColorOverride("font_color", RedColor);
+                _phaseLabel.Text = "Red team moves executing";
+                break;
+
             case GamePhase.RedPlacement:
                 _turnLabel.Text = "Red Team's Turn";
                 _turnLabel.AddThemeColorOverride("font_color", RedColor);
@@ -217,10 +223,10 @@ public partial class UIManager : Control
                 _phaseLabel.Text = "Set move direction (or stay)";
                 break;
 
-            case GamePhase.Resolution:
-                _turnLabel.Text = "Resolution Phase";
-                _turnLabel.AddThemeColorOverride("font_color", NeutralColor);
-                _phaseLabel.Text = "Pieces are moving...";
+            case GamePhase.BlueResolution:
+                _turnLabel.Text = "Resolving...";
+                _turnLabel.AddThemeColorOverride("font_color", BlueColor);
+                _phaseLabel.Text = "Blue team moves executing";
                 break;
 
             case GamePhase.GameOver:

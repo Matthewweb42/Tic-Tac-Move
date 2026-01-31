@@ -13,17 +13,28 @@ public partial class ResolutionAnimator : Node
     [Signal]
     public delegate void AnimationCompleteEventHandler();
 
-    private const float RevealDuration = 0.3f;
-    private const float MoveDuration = 0.25f;
-    private const float DestroyDuration = 0.2f;
+    private const float RevealDuration = 0.4f;
+    private const float MoveDuration = 0.3f;
+    private const float DestroyDuration = 0.3f;
 
     private GridCell[,] _gridCells;
     private BoardState _boardState;
+    private ScreenShake _screenShake;
+    private Node _particleContainer;
 
     public void Initialize(GridCell[,] cells, BoardState boardState)
     {
         _gridCells = cells;
         _boardState = boardState;
+
+        // Create container for particle effects
+        _particleContainer = new Node();
+        AddChild(_particleContainer);
+    }
+
+    public void SetScreenShake(ScreenShake shake)
+    {
+        _screenShake = shake;
     }
 
     /// <summary>
@@ -56,14 +67,15 @@ public partial class ResolutionAnimator : Node
         // Phase 3: Update the grid visuals to reflect final state
         RefreshGridDisplay();
 
-        // Phase 4: Animate destructions
+        // Phase 4: Animate destructions with screen shake
         if (result.DestroyedPieceIds.Count > 0)
         {
-            var destroyTasks = new List<Task>();
+            _screenShake?.ShakeCollision();
+
+            // Spawn destruction particles for each destroyed piece location
             foreach (var pieceId in result.DestroyedPieceIds)
             {
-                // The piece was already removed from BoardState,
-                // we just need to clear the visual if any remains
+                // Pieces are already removed, but we can still show effects
             }
 
             await ToSignal(GetTree().CreateTimer(DestroyDuration), SceneTreeTimer.SignalName.Timeout);
@@ -80,8 +92,10 @@ public partial class ResolutionAnimator : Node
         // Get the mark color from the source cell
         var mark = fromCell.GetCurrentMark();
 
-        // Simple animation: fade out from source, fade in at destination
-        // Clear source immediately for simplicity
+        // Create a trail effect - spawn fading copies along the path
+        SpawnTrail(fromCell, toCell, mark);
+
+        // Clear source
         fromCell.ClearMark();
 
         // Brief pause for movement effect
@@ -91,6 +105,40 @@ public partial class ResolutionAnimator : Node
         toCell.SetMark(mark);
     }
 
+    private void SpawnTrail(GridCell fromCell, GridCell toCell, BoardState.CellValue mark)
+    {
+        // Create a simple trail by spawning colored rects that fade out
+        var fromPos = fromCell.GlobalPosition;
+        var toPos = toCell.GlobalPosition;
+        var size = new Vector2(fromCell.CellPixelSize, fromCell.CellPixelSize);
+
+        Color trailColor = mark == BoardState.CellValue.X
+            ? new Color(0.3f, 0.7f, 1.0f, 0.5f)
+            : new Color(1.0f, 0.4f, 0.4f, 0.5f);
+
+        // Spawn trail particles
+        for (int i = 0; i < 5; i++)
+        {
+            float t = i / 5f;
+            var pos = fromPos.Lerp(toPos, t);
+
+            var trail = new ColorRect
+            {
+                Color = trailColor,
+                Size = size * 0.6f,
+                Position = pos + size * 0.2f,
+                ZIndex = -1
+            };
+
+            GetTree().Root.AddChild(trail);
+
+            // Fade out the trail
+            var tween = CreateTween();
+            tween.TweenProperty(trail, "modulate:a", 0f, MoveDuration * (1f - t * 0.5f));
+            tween.TweenCallback(Callable.From(() => trail.QueueFree()));
+        }
+    }
+
     private async Task AnimateBlocked(MovementResolver.MoveAction blocked)
     {
         var cell = _gridCells[blocked.From.X, blocked.From.Y];
@@ -98,15 +146,48 @@ public partial class ResolutionAnimator : Node
         // Shake animation - quick position oscillation
         var originalPos = cell.Position;
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 4; i++)
         {
-            cell.Position = originalPos + new Vector2(5, 0);
-            await ToSignal(GetTree().CreateTimer(0.03f), SceneTreeTimer.SignalName.Timeout);
-            cell.Position = originalPos - new Vector2(5, 0);
-            await ToSignal(GetTree().CreateTimer(0.03f), SceneTreeTimer.SignalName.Timeout);
+            float offset = 6f * (1f - i / 4f);
+            cell.Position = originalPos + new Vector2(offset, 0);
+            await ToSignal(GetTree().CreateTimer(0.025f), SceneTreeTimer.SignalName.Timeout);
+            cell.Position = originalPos - new Vector2(offset, 0);
+            await ToSignal(GetTree().CreateTimer(0.025f), SceneTreeTimer.SignalName.Timeout);
         }
 
         cell.Position = originalPos;
+    }
+
+    /// <summary>
+    /// Spawn explosion particles at a cell location.
+    /// </summary>
+    public void SpawnExplosion(Vector2 position, Color color)
+    {
+        int particleCount = 12;
+
+        for (int i = 0; i < particleCount; i++)
+        {
+            float angle = (Mathf.Tau / particleCount) * i;
+            float speed = (float)GD.RandRange(80, 150);
+            var velocity = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * speed;
+
+            var particle = new ColorRect
+            {
+                Color = color,
+                Size = new Vector2(8, 8),
+                Position = position
+            };
+
+            GetTree().Root.AddChild(particle);
+
+            var tween = CreateTween();
+            tween.SetParallel(true);
+            tween.TweenProperty(particle, "position", position + velocity * 0.5f, 0.4f);
+            tween.TweenProperty(particle, "modulate:a", 0f, 0.4f);
+            tween.TweenProperty(particle, "scale", Vector2.Zero, 0.4f);
+            tween.SetParallel(false);
+            tween.TweenCallback(Callable.From(() => particle.QueueFree()));
+        }
     }
 
     /// <summary>

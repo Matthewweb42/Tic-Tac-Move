@@ -42,10 +42,27 @@ public enum PremoveResult
 public class PremoveData
 {
     public int PieceId { get; set; }
-    public MoveDirection Direction { get; set; }
+    public System.Collections.Generic.Queue<MoveDirection> MoveQueue { get; set; } = new();
     public Vector2I SourcePosition { get; set; }
-    public Vector2I TargetPosition { get; set; }
     public PremoveResult Result { get; set; } = PremoveResult.Pending;
+
+    /// <summary>
+    /// Legacy property for backward compatibility - returns the first direction or None.
+    /// </summary>
+    public MoveDirection Direction => MoveQueue.Count > 0 ? MoveQueue.Peek() : MoveDirection.None;
+
+    /// <summary>
+    /// Legacy property for backward compatibility - calculates target from first move.
+    /// </summary>
+    public Vector2I TargetPosition
+    {
+        get
+        {
+            if (MoveQueue.Count == 0) return SourcePosition;
+            var direction = MoveQueue.Peek();
+            return SourcePosition + Piece.GetDirectionOffset(direction);
+        }
+    }
 }
 
 /// <summary>

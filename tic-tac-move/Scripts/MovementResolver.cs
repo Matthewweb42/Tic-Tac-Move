@@ -40,18 +40,23 @@ public class MovementResolver
     }
 
     /// <summary>
-    /// Resolve all queued premoves simultaneously.
+    /// Resolve queued premoves for a specific team.
     /// </summary>
-    public ResolutionResult Resolve()
+    public ResolutionResult Resolve(Team team)
     {
         var result = new ResolutionResult();
-        var premoves = _boardState.GetQueuedPremoves();
+        var allPremoves = _boardState.GetQueuedPremoves();
 
-        if (premoves.Count == 0)
+        // Filter premoves to only this team's moves
+        var teamPremoves = allPremoves
+            .Where(kv => _boardState.GetPieceById(kv.Key)?.Team == team)
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        if (teamPremoves.Count == 0)
             return result;
 
         // Step 1: Build movement intentions
-        var intentions = BuildMovementIntentions(premoves);
+        var intentions = BuildMovementIntentions(teamPremoves);
 
         // Step 2: Detect and handle edge blocks
         HandleEdgeBlocks(intentions, result);
@@ -68,8 +73,31 @@ public class MovementResolver
         // Step 6: Execute remaining valid moves
         ExecuteValidMoves(intentions, result);
 
-        // Step 7: Clear all premoves
-        _boardState.ClearAllPremoves();
+        // Step 7: Update premove queues - remove executed moves
+        foreach (var pieceId in teamPremoves.Keys)
+        {
+            var premove = teamPremoves[pieceId];
+            if (premove.MoveQueue.Count > 0)
+            {
+                // Dequeue the move we just executed
+                premove.MoveQueue.Dequeue();
+
+                // If no moves left, clear the premove entirely
+                if (premove.MoveQueue.Count == 0)
+                {
+                    _boardState.ClearPremove(pieceId);
+                }
+                else
+                {
+                    // Update source position for next resolution
+                    var piece = _boardState.GetPieceById(pieceId);
+                    if (piece != null)
+                    {
+                        premove.SourcePosition = piece.Position;
+                    }
+                }
+            }
+        }
 
         return result;
     }
@@ -84,11 +112,17 @@ public class MovementResolver
             if (premove.Direction == MoveDirection.None)
                 continue; // Piece is staying
 
+            // Use current piece position instead of source position
+            var piece = _boardState.GetPieceById(pieceId);
+            if (piece == null) continue;
+
+            var targetPos = piece.Position + Piece.GetDirectionOffset(premove.Direction);
+
             intentions[pieceId] = new MoveAction
             {
                 PieceId = pieceId,
-                From = premove.SourcePosition,
-                To = premove.TargetPosition,
+                From = piece.Position,
+                To = targetPos,
                 Direction = premove.Direction
             };
         }

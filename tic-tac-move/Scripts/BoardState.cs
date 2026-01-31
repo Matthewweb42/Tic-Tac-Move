@@ -117,14 +117,35 @@ public class BoardState
         }
         else
         {
-            _queuedPremoves[pieceId] = new PremoveData
+            // If premove already exists, add to the queue
+            if (_queuedPremoves.TryGetValue(pieceId, out var existingPremove))
             {
-                PieceId = pieceId,
-                Direction = direction,
-                SourcePosition = piece.Position,
-                TargetPosition = piece.GetTargetPosition()
-            };
+                existingPremove.MoveQueue.Enqueue(direction);
+            }
+            else
+            {
+                // Create new premove data with queue
+                var premove = new PremoveData
+                {
+                    PieceId = pieceId,
+                    SourcePosition = piece.Position
+                };
+                premove.MoveQueue.Enqueue(direction);
+                _queuedPremoves[pieceId] = premove;
+            }
         }
+    }
+
+    /// <summary>
+    /// Get the number of premoves queued for a piece.
+    /// </summary>
+    public int GetPremoveCount(int pieceId)
+    {
+        if (_queuedPremoves.TryGetValue(pieceId, out var premove))
+        {
+            return premove.MoveQueue.Count;
+        }
+        return 0;
     }
 
     /// <summary>

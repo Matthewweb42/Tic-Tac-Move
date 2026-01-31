@@ -1,4 +1,5 @@
 using Godot;
+using TicTacMove.Models;
 
 namespace TicTacMove;
 
@@ -14,6 +15,7 @@ public partial class GameManager : Node2D
     private MovementResolver _movementResolver;
     private ResolutionAnimator _resolutionAnimator;
     private PremoveInputHandler _premoveInputHandler;
+    private ScreenShake _screenShake;
 
     private GridCell[,] _gridCells;
     private UIManager _uiManager;
@@ -39,6 +41,7 @@ public partial class GameManager : Node2D
         _movementResolver = new MovementResolver(_boardState);
         _resolutionAnimator = new ResolutionAnimator();
         _premoveInputHandler = new PremoveInputHandler();
+        _screenShake = new ScreenShake();
 
         _gridCells = new GridCell[_gridSize, _gridSize];
 
@@ -46,13 +49,16 @@ public partial class GameManager : Node2D
         AddChild(_phaseManager);
         AddChild(_resolutionAnimator);
         AddChild(_premoveInputHandler);
+        AddChild(_screenShake);
 
         CreateUI();
         CreateGrid();
 
         // Initialize handlers after grid is created
         _resolutionAnimator.Initialize(_gridCells, _boardState);
+        _resolutionAnimator.SetScreenShake(_screenShake);
         _premoveInputHandler.Initialize(_boardState, _gridCells, _uiManager);
+        _screenShake.Initialize(_gridLayer);
 
         // Connect signals
         _phaseManager.PhaseChanged += OnPhaseChanged;
@@ -217,6 +223,16 @@ public partial class GameManager : Node2D
 
     private void HandlePlacement(int row, int col)
     {
+        // Check if clicking a just-placed piece to undo it
+        var existingPiece = _boardState.GetPieceAt(row, col);
+        if (existingPiece != null && existingPiece.JustPlaced)
+        {
+            // Undo the placement
+            _boardState.RemovePiece(existingPiece.Id);
+            _gridCells[row, col].ClearMark();
+            return;
+        }
+
         if (!_boardState.IsEmpty(row, col))
         {
             return;
@@ -244,8 +260,18 @@ public partial class GameManager : Node2D
         // Update UI
         _uiManager.UpdatePhaseDisplay(newPhase);
 
-        // Handle resolution phase
-        if (newPhase == GamePhase.Resolution)
+        // Show premoves for current team during premove phase
+        if (_phaseManager.CanSetPremove())
+        {
+            ShowCurrentTeamPremoves();
+        }
+        else
+        {
+            HideAllPremoves();
+        }
+
+        // Handle resolution phases
+        if (newPhase == GamePhase.RedResolution || newPhase == GamePhase.BlueResolution)
         {
             StartResolution();
         }
@@ -262,8 +288,11 @@ public partial class GameManager : Node2D
 
     private async void StartResolution()
     {
-        // Resolve all movements
-        var result = _movementResolver.Resolve();
+        // Get which team's moves to resolve
+        var team = _phaseManager.GetResolvingTeam();
+
+        // Resolve this team's movements
+        var result = _movementResolver.Resolve(team);
 
         // Animate the resolution
         await _resolutionAnimator.AnimateResolution(result);
@@ -297,6 +326,9 @@ public partial class GameManager : Node2D
     private void HandleWin(WinChecker.WinResult winResult)
     {
         _phaseManager.SetGameOver();
+
+        // Screen shake for win!
+        _screenShake.ShakeWin();
 
         // Highlight winning cells
         foreach (var cell in winResult.WinningCells)
@@ -337,5 +369,44 @@ public partial class GameManager : Node2D
 
         _uiManager.HideWinUI();
         _uiManager.UpdatePhaseDisplay(GamePhase.BluePlacement);
+    }
+
+    private void ShowCurrentTeamPremoves()
+    {
+        // First clear all arrows
+        HideAllPremoves();
+
+        // Get current team
+        var currentTeam = _phaseManager.GetActiveTeam();
+
+        // Show premoves for all pieces of the current team
+        var premoves = _boardState.GetQueuedPremoves();
+        foreach (var (pieceId, premoveData) in premoves)
+        {
+            var piece = _boardState.GetPieceById(pieceId);
+            if (piece == null || piece.Team != currentTeam) continue;
+
+            // Show all arrows in the path
+            var position = piece.Position;
+            foreach (var direction in premoveData.MoveQueue)
+            {
+                if (_boardState.IsInBounds(position.X, position.Y))
+                {
+                    _gridCells[position.X, position.Y].ShowDirectionArrow(direction, true);
+                }
+                position += Piece.GetDirectionOffset(direction);
+            }
+        }
+    }
+
+    private void HideAllPremoves()
+    {
+        for (int row = 0; row < _gridSize; row++)
+        {
+            for (int col = 0; col < _gridSize; col++)
+            {
+                _gridCells[row, col].ShowDirectionArrow(MoveDirection.None, false);
+            }
+        }
     }
 }

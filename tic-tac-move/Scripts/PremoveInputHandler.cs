@@ -22,6 +22,8 @@ public partial class PremoveInputHandler : Node
     private Button _confirmButton;
     private Button _skipButton;
     private Control _buttonContainer;
+    private Vector2I _currentProjectedPosition;  // Where the piece would be after queued moves
+    private int _maxPremoves = 3;  // n-2 where n=5
 
     public bool IsActive => _activePiece != null;
 
@@ -29,6 +31,7 @@ public partial class PremoveInputHandler : Node
     {
         _boardState = board;
         _gridCells = cells;
+        _maxPremoves = board.Size - 2;  // n-2 where n is board size
 
         CreateButtons(parentForButtons);
     }
@@ -83,9 +86,10 @@ public partial class PremoveInputHandler : Node
     {
         _activePiece = piece;
         _selectedDirection = MoveDirection.None;
+        _currentProjectedPosition = piece.Position;
 
         // Show adjacent cell highlights
-        ShowAdjacentHighlights(piece.Position);
+        ShowAdjacentHighlights(_currentProjectedPosition);
 
         // Mark the placed piece as active
         var cell = _gridCells[piece.Position.X, piece.Position.Y];
@@ -93,7 +97,7 @@ public partial class PremoveInputHandler : Node
 
         // Show buttons
         _buttonContainer.Visible = true;
-        _confirmButton.Text = "Confirm (Stay)";
+        UpdateButtonText();
     }
 
     /// <summary>
@@ -122,17 +126,25 @@ public partial class PremoveInputHandler : Node
         if (_activePiece == null) return false;
 
         var clickedPos = new Vector2I(row, col);
-        var piecePos = _activePiece.Position;
 
-        // Check if clicking on the piece itself (stay)
-        if (clickedPos == piecePos)
+        // Check if clicking on the piece itself (stay/skip remaining moves)
+        if (clickedPos == _activePiece.Position)
         {
-            SelectDirection(MoveDirection.None);
+            // If no moves set yet, treat as "stay"
+            if (_boardState.GetPremoveCount(_activePiece.Id) == 0)
+            {
+                SelectDirection(MoveDirection.None);
+            }
+            else
+            {
+                // Already have moves, so just confirm
+                EmitSignal(SignalName.PremoveConfirmed);
+            }
             return true;
         }
 
-        // Check if clicking an adjacent cell
-        var direction = GetDirectionFromPositions(piecePos, clickedPos);
+        // Check if clicking an adjacent cell from the current projected position
+        var direction = GetDirectionFromPositions(_currentProjectedPosition, clickedPos);
         if (direction != MoveDirection.None)
         {
             SelectDirection(direction);
@@ -146,28 +158,68 @@ public partial class PremoveInputHandler : Node
     {
         _selectedDirection = direction;
 
-        // Clear previous arrow
-        if (_activePiece != null)
+        if (direction == MoveDirection.None)
         {
-            var pieceCell = _gridCells[_activePiece.Position.X, _activePiece.Position.Y];
-            pieceCell.ShowDirectionArrow(direction, direction != MoveDirection.None);
+            // Clear all premoves and confirm
+            _boardState.ClearPremove(_activePiece.Id);
+            EmitSignal(SignalName.PremoveConfirmed);
+            return;
         }
 
-        // Update button text
-        if (direction == MoveDirection.None)
+        // Add this direction to the queue
+        _boardState.SetPremove(_activePiece.Id, direction);
+        EmitSignal(SignalName.PremoveSelected, _activePiece.Id, (int)direction);
+
+        // Update projected position
+        _currentProjectedPosition += Piece.GetDirectionOffset(direction);
+
+        // Update visuals - show path
+        UpdatePathVisuals();
+
+        // Check if we've reached the limit
+        int currentCount = _boardState.GetPremoveCount(_activePiece.Id);
+        if (currentCount >= _maxPremoves)
+        {
+            // Auto-confirm after reaching max
+            EmitSignal(SignalName.PremoveConfirmed);
+        }
+        else
+        {
+            // Update highlights for next move
+            HideAllHighlights();
+            ShowAdjacentHighlights(_currentProjectedPosition);
+            UpdateButtonText();
+        }
+    }
+
+    private void UpdatePathVisuals()
+    {
+        // Show arrows along the path
+        var premoveData = _boardState.GetQueuedPremoves();
+        if (!premoveData.TryGetValue(_activePiece.Id, out var data)) return;
+
+        var position = _activePiece.Position;
+        foreach (var dir in data.MoveQueue)
+        {
+            if (_boardState.IsInBounds(position.X, position.Y))
+            {
+                var cell = _gridCells[position.X, position.Y];
+                cell.ShowDirectionArrow(dir, true);
+            }
+            position += Piece.GetDirectionOffset(dir);
+        }
+    }
+
+    private void UpdateButtonText()
+    {
+        int currentCount = _boardState.GetPremoveCount(_activePiece.Id);
+        if (currentCount == 0)
         {
             _confirmButton.Text = "Confirm (Stay)";
         }
         else
         {
-            _confirmButton.Text = $"Confirm ({direction})";
-        }
-
-        // Set the premove on the board state
-        if (_activePiece != null)
-        {
-            _boardState.SetPremove(_activePiece.Id, direction);
-            EmitSignal(SignalName.PremoveSelected, _activePiece.Id, (int)direction);
+            _confirmButton.Text = $"Confirm ({currentCount}/{_maxPremoves} moves)";
         }
     }
 
@@ -208,6 +260,9 @@ public partial class PremoveInputHandler : Node
             (MoveDirection.Right, new Vector2I(0, 1))
         };
 
+        // Get the team of the active piece
+        Team team = _activePiece != null ? _activePiece.Team : Team.Blue;
+
         foreach (var (_, offset) in directions)
         {
             var targetPos = position + offset;
@@ -215,7 +270,7 @@ public partial class PremoveInputHandler : Node
             if (_boardState.IsInBounds(targetPos.X, targetPos.Y))
             {
                 var cell = _gridCells[targetPos.X, targetPos.Y];
-                cell.ShowPremoveHighlight(true);
+                cell.ShowPremoveHighlight(true, team);
             }
         }
     }
